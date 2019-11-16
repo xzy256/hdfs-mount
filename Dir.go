@@ -228,21 +228,32 @@ func (this *Dir) Remove(ctx context.Context, req *fuse.RemoveRequest) error {
 }
 
 // Responds on FUSE Rename request
-func (this *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, newDir fs.Node) error {
+func (this *Dir) Rename(ctx context.Context, req *fuse.RenameRequest, newDir fs.Node, server *fs.Server) error {
 	oldPath := this.AbsolutePathForChild(req.OldName)
 	newPath := newDir.(*Dir).AbsolutePathForChild(req.NewName)
 	Info.Println("Rename [", oldPath, "] to ", newPath)
 	err := this.FileSystem.HdfsAccessor.Rename(oldPath, newPath)
+	var snode fs.Node
 	if err == nil {
 		// Upon successful rename, updating in-memory representation of the file entry
 		if node := this.EntriesGet(req.OldName); node != nil {
 			if fnode, ok := node.(*File); ok {
-				fnode.Attrs.Name = req.NewName
+				snode = server.GetNode(fnode.Attrs.Inode)
 			} else if dnode, ok := node.(*Dir); ok {
-				dnode.Attrs.Name = req.NewName
+				snode = server.GetNode(dnode.Attrs.Inode)
+			}
+			if snode == nil {
+				return err
+			}
+			if sfnode, ok := snode.(*File); ok {
+				sfnode.Attrs.Name = req.NewName
+				sfnode.Parent = newDir.(*Dir)
+			} else if sdnode, ok := snode.(*Dir); ok {
+				sdnode.Attrs.Name = req.NewName
+				sdnode.Parent = newDir.(*Dir)
 			}
 			this.EntriesRemove(req.OldName)
-			newDir.(*Dir).EntriesSet(req.NewName, node)
+			newDir.(*Dir).EntriesSet(req.NewName, snode)
 		}
 	}
 	return err

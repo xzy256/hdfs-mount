@@ -210,7 +210,7 @@ type NodeForgetter interface {
 }
 
 type NodeRenamer interface {
-	Rename(ctx context.Context, req *fuse.RenameRequest, newDir Node) error
+	Rename(ctx context.Context, req *fuse.RenameRequest, newDir Node, server *Server) error
 }
 
 type NodeMknoder interface {
@@ -426,6 +426,15 @@ func (s *Server) Serve(fs FS) error {
 		}()
 	}
 	return nil
+}
+
+func (s *Server) GetNode(inode uint64) Node {
+	for i:=0; i < len(s.node); i++  {
+		if s.node[i] != nil && s.node[i].inode == inode {
+			return s.node[i].node;
+		}
+	}
+	return nil;
 }
 
 // Serve serves a FUSE connection with the default settings. See
@@ -1332,7 +1341,7 @@ func (c *Server) handleRequest(ctx context.Context, node Node, snode *serveNode,
 		if !ok {
 			return fuse.EIO // XXX or EPERM like Mkdir?
 		}
-		err := n.Rename(ctx, r, newDirNode.node)
+		err := n.Rename(ctx, r, newDirNode.node, c)
 		if err != nil {
 			return err
 		}
